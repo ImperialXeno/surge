@@ -1,9 +1,7 @@
 package downloader
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -20,9 +18,6 @@ import (
 	"encoding/hex"
 
 	"surge/internal/util"
-
-	"github.com/h2non/filetype"
-	"github.com/vfaronov/httpheader"
 )
 
 type Downloader struct {
@@ -93,77 +88,9 @@ func (d *Downloader) singleDownload(ctx context.Context, rawurl, outPath string,
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Determine the filename
-	filename := filepath.Base(parsed.Path) // Start with filename from URL path
-
-	// Try to extract filename from Content-Disposition header
-	if _, name, err := httpheader.ContentDisposition(resp.Header); err == nil && name != "" {
-		filename = filepath.Base(name)
-		if verbose {
-			fmt.Fprintf(os.Stderr, "Filename from Content-Disposition: %s\n", filename)
-		}
-	}
-
-	// Read first up to 512 bytes for sniffing. handle short reads
-	header := make([]byte, 512)
-	n, rerr := io.ReadFull(resp.Body, header)
-	if rerr != nil {
-		if rerr == io.ErrUnexpectedEOF || rerr == io.EOF {
-			// fewer than 512 bytes available but n contains what we did read
-			header = header[:n]
-		} else {
-			// real error (connection closed, etc.)
-			return fmt.Errorf("reading header: %w", rerr)
-		}
-	} else {
-		header = header[:n]
-	}
-
-	body := io.MultiReader(bytes.NewReader(header), resp.Body)
-
-	if verbose {
-		mimeType := http.DetectContentType(header)
-		fmt.Fprintln(os.Stderr, "Detected MIME:", mimeType)
-
-		if kind, _ := filetype.Match(header); kind != filetype.Unknown {
-			fmt.Fprintln(os.Stderr, "Magic Type:", kind.Extension, kind.MIME)
-		}
-	}
-
-	// ZIP filename extraction (if applicable, override current filename)
-	if len(header) >= 4 && bytes.HasPrefix(header, []byte{0x50, 0x4B, 0x03, 0x04}) && len(header) >= 30 {
-		nameLen := int(binary.LittleEndian.Uint16(header[26:28]))
-		start := 30
-		end := start + nameLen
-		if end <= len(header) {
-			zipName := string(header[start:end])
-			if zipName != "" {
-				filename = filepath.Base(zipName) // Override filename with ZIP internal name
-				if verbose {
-					fmt.Fprintln(os.Stderr, "ZIP internal filename:", zipName)
-				}
-			}
-		}
-	}
-
-	// MIME type extension (if filename has no extension and MIME type is detectable)
-	if filepath.Ext(filename) == "" { // Only add extension if one isn't already present
-		if kind, _ := filetype.Match(header); kind != filetype.Unknown {
-			if kind.Extension != "" {
-				filename = filename + "." + kind.Extension
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Added extension from magic type: %s\n", kind.Extension)
-				}
-			}
-		}
-	}
-
-	// Final fallback: If filename is still empty or invalid
-	if filename == "" || filename == "." || filename == "/" {
-		filename = "download.bin"
-		if verbose {
-			fmt.Fprintln(os.Stderr, "Falling back to default filename: download.bin")
-		}
+	filename, body, err := util.DetermineFilename(rawurl, resp, verbose)
+	if err != nil {
+		return err
 	}
 
 	outDir := filepath.Dir(outPath)
@@ -389,6 +316,10 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 		return err
 	}
 
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
+		"AppleWebKit/537.36 (KHTML, like Gecko) "+
+		"Chrome/120.0.0.0 Safari/537.36")
+
 	resp, err := d.Client.Do(req)
 	if err != nil {
 		return err
@@ -398,6 +329,12 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 	if resp.Header.Get("Accept-Ranges") != "bytes" {
 		fmt.Println("Server does not support concurrent download, falling back to single thread")
 		return d.singleDownload(ctx, rawurl, outPath, verbose, md5sum, sha256sum)
+	}
+
+	// Determine the filename using the helper function
+	filename, _, err := util.DetermineFilename(rawurl, resp, verbose)
+	if err != nil {
+		return err
 	}
 
 	totalSize, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
@@ -412,6 +349,15 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 
 	startTime := time.Now()
 
+	// Determine the final destination path
+	finalDestPath := outPath
+	if info, err := os.Stat(outPath); err == nil && info.IsDir() {
+		finalDestPath = filepath.Join(outPath, filename)
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Destination path updated to: %s (outPath was a directory)\n", finalDestPath)
+		}
+	}
+
 	for i := 0; i < concurrent; i++ {
 		wg.Add(1)
 		start := int64(i) * chunkSize
@@ -422,7 +368,7 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 
 		go func(i int, start, end int64) {
 			defer wg.Done()
-			err := d.downloadChunk(ctx, rawurl, outPath, i, start, end, &mu, &written, totalSize, startTime, verbose)
+			err := d.downloadChunk(ctx, rawurl, finalDestPath, filename, i, start, end, &mu, &written, totalSize, startTime, verbose)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "\nError downloading chunk %d: %v\n", i, err)
 			}
@@ -434,14 +380,14 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 	fmt.Print("Downloaded all parts! Merging...\n")
 
 	// Merge files
-	destFile, err := os.Create(outPath)
+	destFile, err := os.Create(finalDestPath)
 	if err != nil {
 		return err
 	}
 	defer destFile.Close()
 
 	for i := 0; i < concurrent; i++ {
-		partFileName := fmt.Sprintf("%s.part%d", outPath, i)
+		partFileName := fmt.Sprintf("%s.part%d", finalDestPath, i) // Use finalDestPath for part file names
 		partFile, err := os.Open(partFileName)
 		if err != nil {
 			return err
@@ -460,7 +406,7 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 		if verbose {
 			fmt.Fprintln(os.Stderr, "User provided MD5 checksum. Verifying merged file...")
 		}
-		file, err := os.Open(outPath)
+		file, err := os.Open(finalDestPath)
 		if err != nil {
 			return fmt.Errorf("failed to open merged file for checksum verification: %w", err)
 		}
@@ -480,7 +426,7 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 		if verbose {
 			fmt.Fprintln(os.Stderr, "User provided SHA256 checksum. Verifying merged file...")
 		}
-		file, err := os.Open(outPath)
+		file, err := os.Open(finalDestPath)
 		if err != nil {
 			return fmt.Errorf("failed to open merged file for checksum verification: %w", err)
 		}
@@ -500,7 +446,7 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 		if verbose {
 			fmt.Fprintln(os.Stderr, "Server provided Content-MD5 checksum. Verifying merged file...")
 		}
-		file, err := os.Open(outPath)
+		file, err := os.Open(finalDestPath)
 		if err != nil {
 			return fmt.Errorf("failed to open merged file for checksum verification: %w", err)
 		}
@@ -520,7 +466,7 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 		if verbose {
 			fmt.Fprintln(os.Stderr, "Server provided X-Checksum-SHA256 checksum. Verifying merged file...")
 		}
-		file, err := os.Open(outPath)
+		file, err := os.Open(finalDestPath)
 		if err != nil {
 			return fmt.Errorf("failed to open merged file for checksum verification: %w", err)
 		}
@@ -544,11 +490,11 @@ func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath str
 
 	elapsed := time.Since(startTime)
 	speed := float64(totalSize) / 1024.0 / elapsed.Seconds() // KiB/s
-	fmt.Fprintf(os.Stderr, "\nDownloaded %s in %s (%s/s)\n", outPath, elapsed.Round(time.Second), util.ConvertBytesToHumanReadable(int64(speed*1024)))
+	fmt.Fprintf(os.Stderr, "\nDownloaded %s in %s (%s/s)\n", finalDestPath, elapsed.Round(time.Second), util.ConvertBytesToHumanReadable(int64(speed*1024)))
 	return nil
 }
 
-func (d *Downloader) downloadChunk(ctx context.Context, rawurl, outPath string, index int, start, end int64, mu *sync.Mutex, written *int64, totalSize int64, startTime time.Time, verbose bool) error {
+func (d *Downloader) downloadChunk(ctx context.Context, rawurl, outPath, filename string, index int, start, end int64, mu *sync.Mutex, written *int64, totalSize int64, startTime time.Time, verbose bool) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
@@ -562,7 +508,8 @@ func (d *Downloader) downloadChunk(ctx context.Context, rawurl, outPath string, 
 	}
 	defer resp.Body.Close()
 
-	partFileName := fmt.Sprintf("%s.part%d", outPath, index)
+	// Construct part file name using the determined filename and outPath
+	partFileName := fmt.Sprintf("%s.part%d", filepath.Join(filepath.Dir(outPath), filename), index)
 	partFile, err := os.Create(partFileName)
 	if err != nil {
 		return err
