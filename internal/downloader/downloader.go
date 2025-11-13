@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -29,9 +28,9 @@ func NewDownloader() *Downloader {
 	return &Downloader{Client: &client}
 }
 
-func (d *Downloader) Download(ctx context.Context, rawurl, outPath string, concurrent int, verbose bool, md5sum, sha256sum string) error {
-	if concurrent > 1 {
-		return d.concurrentDownload(ctx, rawurl, outPath, concurrent, verbose, md5sum, sha256sum)
+func (d *Downloader) Download(ctx context.Context, rawurl, outPath string, concurrent, verbose bool, md5sum, sha256sum string) error {
+	if concurrent {
+		return d.concurrentDownload(ctx, rawurl, outPath, true, verbose, md5sum, sha256sum)
 	}
 	return d.singleDownload(ctx, rawurl, outPath, verbose, md5sum, sha256sum)
 }
@@ -229,6 +228,7 @@ func (d *Downloader) singleDownload(ctx context.Context, rawurl, outPath string,
 	return nil
 }
 
+/*
 func (d *Downloader) concurrentDownload(ctx context.Context, rawurl, outPath string, concurrent int, verbose bool, md5sum, sha256sum string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
@@ -420,3 +420,4 @@ func (d *Downloader) printProgress(written, total int64, start time.Time, verbos
 		fmt.Fprintf(os.Stderr, "\r%s (%.1f KiB/s)", utils.ConvertBytesToHumanReadable(written), speed)
 	}
 }
+*/
