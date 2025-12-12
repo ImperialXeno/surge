@@ -14,8 +14,8 @@ const (
 	ProgressBarWidthOffset = 4
 	DefaultPaddingX        = 1
 	DefaultPaddingY        = 0
-	PopupPaddingY          = 2
-	PopupPaddingX          = 4
+	PopupPaddingY          = 1
+	PopupPaddingX          = 2
 
 	// Units
 	Megabyte = 1024.0 * 1024.0

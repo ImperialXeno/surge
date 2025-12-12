@@ -95,7 +95,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = InputState
 				m.focusedInput = 0
 				m.inputs[0].SetValue("")
+				m.inputs[0].Focus()
 				m.inputs[1].SetValue(".")
+				m.inputs[1].Blur()
+				m.inputs[2].SetValue("")
+				m.inputs[2].Blur()
 				return m, nil
 			}
 
@@ -130,14 +134,28 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if msg.String() == "enter" {
-				if m.focusedInput == 0 {
-					m.focusedInput = 1
-					m.inputs[1].Focus()
+				// Navigate through inputs: URL -> Path -> Filename -> Start
+				if m.focusedInput < 2 {
+					m.inputs[m.focusedInput].Blur()
+					m.focusedInput++
+					m.inputs[m.focusedInput].Focus()
 					return m, nil
 				}
-				// Start download
+				// Start download (on last input)
 				url := m.inputs[0].Value()
+				if url == "" {
+					// URL is mandatory - don't start
+					m.focusedInput = 0
+					m.inputs[0].Focus()
+					m.inputs[1].Blur()
+					m.inputs[2].Blur()
+					return m, nil
+				}
 				path := m.inputs[1].Value()
+				if path == "" {
+					path = "."
+				}
+				// filename := m.inputs[2].Value() // Will use later
 				m.state = DashboardState
 
 				// Optimistically add download
@@ -146,6 +164,20 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.downloads = append(m.downloads, newDownload)
 
 				return m, StartDownloadCmd(m.progressChan, nextID, url, path)
+			}
+
+			// Up/Down navigation between inputs
+			if msg.String() == "up" && m.focusedInput > 0 {
+				m.inputs[m.focusedInput].Blur()
+				m.focusedInput--
+				m.inputs[m.focusedInput].Focus()
+				return m, nil
+			}
+			if msg.String() == "down" && m.focusedInput < 2 {
+				m.inputs[m.focusedInput].Blur()
+				m.focusedInput++
+				m.inputs[m.focusedInput].Focus()
+				return m, nil
 			}
 
 			var cmd tea.Cmd

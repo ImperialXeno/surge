@@ -67,16 +67,22 @@ func InitialRootModel() RootModel {
 	urlInput.Placeholder = "https://example.com/file.zip"
 	urlInput.Focus()
 	urlInput.Width = InputWidth
-	urlInput.Prompt = "URL: "
+	urlInput.Prompt = ""
 
 	pathInput := textinput.New()
 	pathInput.Placeholder = "."
 	pathInput.Width = InputWidth
-	pathInput.Prompt = "Out: "
+	pathInput.Prompt = ""
+	pathInput.SetValue(".")
+
+	filenameInput := textinput.New()
+	filenameInput.Placeholder = "(auto-detect)"
+	filenameInput.Width = InputWidth
+	filenameInput.Prompt = ""
 
 	return RootModel{
 		downloads:    make([]*DownloadModel, 0),
-		inputs:       []textinput.Model{urlInput, pathInput},
+		inputs:       []textinput.Model{urlInput, pathInput, filenameInput},
 		state:        DashboardState,
 		progressChan: make(chan tea.Msg, ProgressChannelBuffer),
 	}

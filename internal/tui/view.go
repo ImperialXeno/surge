@@ -16,21 +16,20 @@ func (m RootModel) View() string {
 	}
 
 	if m.state == InputState {
-		// Centered popup
+		labelStyle := lipgloss.NewStyle().Width(10).Foreground(ColorSubtext)
+		// Centered popup - compact layout
 		popup := lipgloss.JoinVertical(lipgloss.Left,
 			TitleStyle.Render("Add New Download"),
 			"",
-			AppStyle.Render("URL:"),
-			m.inputs[0].View(),
+			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("URL:"), m.inputs[0].View()),
+			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("Path:"), m.inputs[1].View()),
+			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("Filename:"), m.inputs[2].View()),
 			"",
-			AppStyle.Render("Path:"),
-			m.inputs[1].View(),
-			"",
-			lipgloss.NewStyle().Foreground(ColorSubtext).Render("[Enter] Start  [Esc] Cancel"),
+			lipgloss.NewStyle().Foreground(ColorSubtext).Render("[Enter] Next/Start  [Esc] Cancel"),
 		)
 
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			PanelStyle.Padding(PopupPaddingY, PopupPaddingX).Render(popup),
+			PanelStyle.Padding(1, 2).Render(popup),
 		)
 	}
 
