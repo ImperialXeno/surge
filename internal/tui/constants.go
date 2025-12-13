@@ -1,6 +1,10 @@
 package tui
 
-import "time"
+import (
+	"time"
+
+	"surge/internal/downloader"
+)
 
 const (
 	// Timeouts and Intervals
@@ -16,9 +20,9 @@ const (
 	PopupPaddingY          = 1
 	PopupPaddingX          = 2
 
-	// Units
-	Megabyte = 1024.0 * 1024.0
+	// Channel Buffers - use consolidated constant from downloader
+	ProgressChannelBuffer = downloader.ProgressChannelBuffer
 
-	// Channel Buffers - reduced since only events use channel now
-	ProgressChannelBuffer = 16
+	// Units - use consolidated constant from downloader
+	Megabyte = downloader.Megabyte
 )

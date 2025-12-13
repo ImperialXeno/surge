@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"surge/internal/messages"
 	"surge/internal/utils"
@@ -18,7 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var probeClient = &http.Client{Timeout: 10 * time.Second}
+var probeClient = &http.Client{Timeout: ProbeTimeout}
 
 var ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
 	"AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -36,7 +35,7 @@ type ProbeResult struct {
 func probeServer(ctx context.Context, rawurl string) (*ProbeResult, error) {
 	utils.Debug("Probing server: %s", rawurl)
 
-	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, rawurl, nil)
@@ -125,60 +124,60 @@ func extractFilename(rawurl string, resp *http.Response) string {
 }
 
 // TUIDownload is the main entry point for TUI downloads
-func TUIDownload(ctx context.Context, rawurl, outPath string, verbose bool, md5sum, sha256sum string, progressCh chan<- tea.Msg, id int, state *ProgressState) error {
+func TUIDownload(ctx context.Context, cfg DownloadConfig) error {
 	// Probe server once to get all metadata
-	probe, err := probeServer(ctx, rawurl)
+	probe, err := probeServer(ctx, cfg.URL)
 	if err != nil {
 		utils.Debug("Probe failed: %v", err)
 		return err
 	}
 
 	// Construct proper output path
-	destPath := outPath
-	if info, err := os.Stat(outPath); err == nil && info.IsDir() {
-		destPath = filepath.Join(outPath, probe.Filename)
+	destPath := cfg.OutputPath
+	if info, err := os.Stat(cfg.OutputPath); err == nil && info.IsDir() {
+		destPath = filepath.Join(cfg.OutputPath, probe.Filename)
 	}
 	utils.Debug("Destination path: %s", destPath)
 
 	// Send download started message
-	if progressCh != nil {
-		progressCh <- messages.DownloadStartedMsg{
-			DownloadID: id,
-			URL:        rawurl,
+	if cfg.ProgressCh != nil {
+		cfg.ProgressCh <- messages.DownloadStartedMsg{
+			DownloadID: cfg.ID,
+			URL:        cfg.URL,
 			Filename:   probe.Filename,
 			Total:      probe.FileSize,
 		}
 	}
 
 	// Update shared state
-	if state != nil {
-		state.SetTotalSize(probe.FileSize)
+	if cfg.State != nil {
+		cfg.State.SetTotalSize(probe.FileSize)
 	}
 
 	// Choose downloader based on probe results
 	if probe.SupportsRange && probe.FileSize > 0 {
 		utils.Debug("Using concurrent downloader")
-		d := NewConcurrentDownloader()
-		d.SetProgressChan(progressCh)
-		d.SetID(id)
-		if state != nil {
-			d.SetProgressState(state)
-		}
-		return d.DownloadWithMetadata(ctx, rawurl, destPath, probe.FileSize, verbose, md5sum, sha256sum)
+		d := NewConcurrentDownloader(cfg.ID, cfg.ProgressCh, cfg.State)
+		return d.Download(ctx, cfg.URL, destPath, probe.FileSize, cfg.Verbose)
 	}
 
 	// Fallback to single-threaded downloader
 	utils.Debug("Using single-threaded downloader")
-	d := NewSingleDownloader()
-	d.SetProgressChan(progressCh)
-	d.SetID(id)
-	if state != nil {
-		d.SetProgressState(state)
-	}
-	return d.DownloadWithMetadata(ctx, rawurl, destPath, probe.FileSize, probe.Filename, verbose)
+	d := NewSingleDownloader(cfg.ID, cfg.ProgressCh, cfg.State)
+	return d.Download(ctx, cfg.URL, destPath, probe.FileSize, probe.Filename, cfg.Verbose)
 }
 
-// Download is the CLI entry point (non-TUI)
-func Download(ctx context.Context, rawurl, outPath string, verbose bool, md5sum, sha256sum string, progressCh chan<- tea.Msg, id int) error {
-	return TUIDownload(ctx, rawurl, outPath, verbose, md5sum, sha256sum, progressCh, id, nil)
+// Download is the CLI entry point (non-TUI) - convenience wrapper
+func Download(ctx context.Context, url, outPath string, verbose bool, md5sum, sha256sum string, progressCh chan<- tea.Msg, id int) error {
+	cfg := DownloadConfig{
+		URL:        url,
+		OutputPath: outPath,
+		ID:         id,
+		Verbose:    verbose,
+		MD5Sum:     md5sum,
+		SHA256Sum:  sha256sum,
+		ProgressCh: progressCh,
+		State:      nil,
+	}
+	return TUIDownload(ctx, cfg)
 }

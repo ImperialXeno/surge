@@ -36,6 +36,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Progress from polling reporter
 		for _, d := range m.downloads {
 			if d.ID == msg.DownloadID {
+				// Don't update if already done
+				if d.done {
+					break
+				}
+
 				d.Downloaded = msg.Downloaded
 				d.Speed = msg.Speed
 				d.Elapsed = time.Since(d.StartTime)
@@ -46,8 +51,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd := d.progress.SetPercent(percentage)
 					cmds = append(cmds, cmd)
 				}
-				// Continue polling
-				cmds = append(cmds, d.reporter.PollCmd())
+				// Continue polling only if not done
+				if !d.done {
+					cmds = append(cmds, d.reporter.PollCmd())
+				}
 				break
 			}
 		}
@@ -197,10 +204,20 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func StartDownloadCmd(sub chan tea.Msg, id int, url, path string, state *downloader.ProgressState) tea.Cmd {
 	return func() tea.Msg {
-
 		ctx := context.Background()
 		go func() {
-			err := downloader.TUIDownload(ctx, url, path, false, "", "", sub, id, state)
+			cfg := downloader.DownloadConfig{
+				URL:        url,
+				OutputPath: path,
+				ID:         id,
+				Verbose:    false,
+				MD5Sum:     "",
+				SHA256Sum:  "",
+				ProgressCh: sub,
+				State:      state,
+			}
+
+			err := downloader.TUIDownload(ctx, cfg)
 			if err != nil {
 				state.SetError(err)
 				sub <- messages.DownloadErrorMsg{DownloadID: id, Err: err}
