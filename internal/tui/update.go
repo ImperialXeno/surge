@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"time"
 
 	"surge/internal/downloader"
@@ -135,6 +137,22 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	// Handle filepicker messages for all message types when in FilePickerState
+	default:
+		if m.state == FilePickerState {
+			var cmd tea.Cmd
+			m.filepicker, cmd = m.filepicker.Update(msg)
+
+			// Check if a directory was selected
+			if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+				m.inputs[1].SetValue(path)
+				m.state = InputState
+				return m, nil
+			}
+
+			return m, cmd
+		}
+
 	case tea.KeyMsg:
 		switch m.state {
 		case DashboardState:
@@ -247,6 +265,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = DashboardState
 				return m, nil
 			}
+			// Tab to open file picker when on path input
+			if msg.String() == "tab" && m.focusedInput == 1 {
+				m.state = FilePickerState
+				// Reset filepicker to current directory
+				m.filepicker.CurrentDirectory = m.PWD
+				return m, m.filepicker.Init()
+			}
 			if msg.String() == "enter" {
 				// Navigate through inputs: URL -> Path -> Filename -> Start
 				if m.focusedInput < 2 {
@@ -310,6 +335,41 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			var cmd tea.Cmd
 			m.inputs[m.focusedInput], cmd = m.inputs[m.focusedInput].Update(msg)
+			return m, cmd
+
+		case FilePickerState:
+			if msg.String() == "esc" {
+				// Cancel and return to input state
+				m.state = InputState
+				return m, nil
+			}
+
+			// H key to jump to Downloads folder
+			if msg.String() == "h" || msg.String() == "H" {
+				homeDir, _ := os.UserHomeDir()
+				m.filepicker.CurrentDirectory = filepath.Join(homeDir, "Downloads")
+				return m, m.filepicker.Init()
+			}
+
+			// '.' to select current directory
+			if msg.String() == "." {
+				m.inputs[1].SetValue(m.filepicker.CurrentDirectory)
+				m.state = InputState
+				return m, nil
+			}
+
+			// Pass key to filepicker
+			var cmd tea.Cmd
+			m.filepicker, cmd = m.filepicker.Update(msg)
+
+			// Check if a directory was selected
+			if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+				// Set the path input value and return to input state
+				m.inputs[1].SetValue(path)
+				m.state = InputState
+				return m, nil
+			}
+
 			return m, cmd
 		}
 	}

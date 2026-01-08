@@ -18,18 +18,29 @@ func (m RootModel) View() string {
 	if m.state == InputState {
 		labelStyle := lipgloss.NewStyle().Width(10).Foreground(ColorSubtext)
 		// Centered popup - compact layout
+		// Always show browse hint to prevent box expansion, but dim when not focused
+		hintStyle := lipgloss.NewStyle().MarginLeft(1).Foreground(ColorBorder) // Dimmed
+		if m.focusedInput == 1 {
+			hintStyle = lipgloss.NewStyle().MarginLeft(1).Foreground(ColorSecondary) // Highlighted
+		}
+		pathLine := lipgloss.JoinHorizontal(lipgloss.Left,
+			labelStyle.Render("Path:"),
+			m.inputs[1].View(),
+			hintStyle.Render("[Tab] Browse"),
+		)
+
 		popup := lipgloss.JoinVertical(lipgloss.Left,
 			TitleStyle.Render("Add New Download"),
 			"",
 			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("URL:"), m.inputs[0].View()),
-			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("Path:"), m.inputs[1].View()),
+			pathLine,
 			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("Filename:"), m.inputs[2].View()),
 			"",
 			lipgloss.NewStyle().Foreground(ColorSubtext).Render("[Enter] Next/Start  [Esc] Cancel"),
 		)
 
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			PanelStyle.Padding(1, 2).Render(popup),
+			PanelStyle.Width(PopupWidth).Padding(1, 2).Render(popup),
 		)
 	}
 
@@ -44,6 +55,22 @@ func (m RootModel) View() string {
 					lipgloss.NewStyle().Foreground(ColorSubtext).Render("[Esc] Back"),
 				),
 			),
+		)
+	}
+
+	if m.state == FilePickerState {
+		pickerContent := lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Select Directory"),
+			"",
+			lipgloss.NewStyle().Foreground(ColorSubtext).Render(m.filepicker.CurrentDirectory),
+			"",
+			m.filepicker.View(),
+			"",
+			lipgloss.NewStyle().Foreground(ColorSubtext).Render("[.] Select Here  [H] Downloads  [Enter] Open  [Esc] Cancel"),
+		)
+
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
+			PanelStyle.Width(PopupWidth).Padding(1, 2).Render(pickerContent),
 		)
 	}
 
@@ -146,7 +173,9 @@ func renderCard(d *DownloadModel, selected bool, width int) string {
 		pct = float64(d.Downloaded) / float64(d.Total)
 	}
 	d.progress.Width = width - ProgressBarWidthOffset
-	progressBar := d.progress.View()
+	// Use ViewAs to render at exact percentage (important for paused downloads)
+	// ViewAs doesn't require animation commands unlike SetPercent + View
+	progressBar := d.progress.ViewAs(pct)
 
 	// Stats line
 	eta := "N/A"
@@ -156,7 +185,7 @@ func renderCard(d *DownloadModel, selected bool, width int) string {
 		eta = time.Duration(remainingSeconds * float64(time.Second)).Round(time.Second).String()
 	}
 
-	stats := fmt.Sprintf("Speed: %.1f MB/s | Conns: %d | ETA: %s | %.0f%%", d.Speed/Megabyte, d.Connections, eta, pct*100)
+	stats := fmt.Sprintf("Speed: %.2f MB/s | Conns: %d | ETA: %s | %.0f%%", d.Speed/Megabyte, d.Connections, eta, pct*100)
 	if d.done {
 		stats = fmt.Sprintf("Completed | Size: %s", utils.ConvertBytesToHumanReadable(d.Total))
 	} else if d.paused {
@@ -200,12 +229,12 @@ func renderDetails(m *DownloadModel) string {
 
 	// Progress Bar
 	m.progress.Width = 60
-	progressBar := m.progress.View()
+	progressBar := m.progress.ViewAs(percentage)
 
 	stats := lipgloss.JoinVertical(lipgloss.Left,
-		fmt.Sprintf("Progress:    %.1f%%", percentage*100),
+		fmt.Sprintf("Progress:    %.2f%%", percentage*100),
 		fmt.Sprintf("Size:        %s / %s", utils.ConvertBytesToHumanReadable(m.Downloaded), utils.ConvertBytesToHumanReadable(m.Total)),
-		fmt.Sprintf("Speed:       %.1f MB/s", m.Speed/Megabyte),
+		fmt.Sprintf("Speed:       %.2f MB/s", m.Speed/Megabyte),
 		fmt.Sprintf("ETA:         %s", eta),
 		fmt.Sprintf("Connections: %d", m.Connections),
 		fmt.Sprintf("Elapsed:     %s", m.Elapsed.Round(time.Second)),

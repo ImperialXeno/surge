@@ -330,7 +330,7 @@ def generate_speed_graph(workers: dict, output_file: str = "speed_graph.png"):
     # Add horizontal line for overall average
     overall_avg = sum(speeds) / len(speeds) if speeds else 0
     ax.axhline(y=overall_avg, color='#4ecdc4', linestyle='--', linewidth=1.5,
-               label=f'Overall Avg: {overall_avg:.1f} MB/s', alpha=0.8)
+               label=f'Overall Avg: {overall_avg:.2f} MB/s', alpha=0.8)
     
     # Styling
     ax.set_xlabel('Time', fontsize=12, color='white', fontweight='bold')
@@ -413,7 +413,7 @@ def generate_per_worker_speed_graph(workers: dict, health_kills: list = None, ou
         # Add average line
         avg_speed = sum(speeds) / len(speeds) if speeds else 0
         ax.axhline(y=avg_speed, color=avg_color, linestyle='--', 
-                   linewidth=1.5, alpha=0.8, label=f'Avg: {avg_speed:.1f} MB/s')
+                   linewidth=1.5, alpha=0.8, label=f'Avg: {avg_speed:.2f} MB/s')
         
         # Fill under the curve
         ax.fill_between(times, speeds, alpha=0.2, color=bar_color)
@@ -546,8 +546,8 @@ def analyze_and_report(data: dict):
         else:
             status = "OK ✅"
         
-        util_str = f"{util:.1f}%" if util > 0 else "N/A"
-        idle_str = f"{idle:.1f}s" if idle > 0 else "0s"
+        util_str = f"{util:.2f}%" if util > 0 else "N/A"
+        idle_str = f"{idle:.2f}s" if idle > 0 else "0s"
         speed_str = f"{avg_speed:.2f} MB/s" if avg_speed > 0 else "N/A"
         
         print(f"  {w.worker_id:>3} │ {task_count:>5} │ {speed_str:>10} │ {util_str:>7} │ {idle_str:>8} │ {status:<15}")
@@ -571,7 +571,7 @@ def analyze_and_report(data: dict):
         print(f"  📊 Ratio:   {ratio:.2f}x difference")
         
         if ratio >= SPEED_VARIANCE_WARN_RATIO:
-            print(f"\n  ⚠️  WARNING: Speed variance is {ratio:.1f}x!")
+            print(f"\n  ⚠️  WARNING: Speed variance is {ratio:.2f}x!")
             print(f"      This suggests Worker {slowest_wid} may have network issues or is")
             print(f"      competing for bandwidth. Consider investigating connection quality.")
     
@@ -599,7 +599,7 @@ def analyze_and_report(data: dict):
         for wid, t in slow_tasks[:10]:  # Top 10 slowest
             offset_mb = t.offset / MB
             size_mb = t.length / MB
-            print(f"  {wid:>6} │ {offset_mb:>10.1f}MB │ {size_mb:>8.1f}MB │ {t.duration_seconds:>8.2f}s │ {t.speed_mbps:>8.2f}MB/s")
+            print(f"  {wid:>6} │ {offset_mb:>10.2f}MB │ {size_mb:>8.2f}MB │ {t.duration_seconds:>8.2f}s │ {t.speed_mbps:>8.2f}MB/s")
         
         if len(slow_tasks) > 10:
             print(f"\n  ... and {len(slow_tasks) - 10} more slow tasks")
@@ -620,16 +620,16 @@ def analyze_and_report(data: dict):
         max_speed = max(speeds) if speeds else 0
         
         print(f"\n  ┌─ Worker {w.worker_id} ─────────────────────────────────────────")
-        print(f"  │ Tasks: {len(w.tasks):<5}  Total Data: {w.total_bytes / MB:.1f} MB")
+        print(f"  │ Tasks: {len(w.tasks):<5}  Total Data: {w.total_bytes / MB:.2f} MB")
         print(f"  │ Speed: Min={min_speed:.2f}, Avg={w.avg_speed_mbps:.2f}, Max={max_speed:.2f} MB/s")
-        print(f"  │ Wall Time: {w.wall_time:.1f}s  Work Time: {w.total_work_time:.1f}s  Idle: {w.idle_time:.1f}s")
+        print(f"  │ Wall Time: {w.wall_time:.2f}s  Work Time: {w.total_work_time:.2f}s  Idle: {w.idle_time:.2f}s")
         
         # Top N slowest tasks for this worker
         sorted_tasks = sorted(w.tasks, key=lambda t: t.duration_seconds, reverse=True)
         print(f"  │")
         print(f"  │ Top {TOP_N_SLOW_TASKS} Slowest Tasks:")
         for i, t in enumerate(sorted_tasks[:TOP_N_SLOW_TASKS], 1):
-            print(f"  │   {i}. {t.duration_seconds:.2f}s @ {t.speed_mbps:.2f}MB/s (offset {t.offset / MB:.1f}MB)")
+            print(f"  │   {i}. {t.duration_seconds:.2f}s @ {t.speed_mbps:.2f}MB/s (offset {t.offset / MB:.2f}MB)")
         
         print(f"  └{'─' * 50}")
     
@@ -646,7 +646,7 @@ def analyze_and_report(data: dict):
         print(f"\n  Total Splits: {total_splits}")
         if first_split_time and last_split_time:
             split_duration = (last_split_time - first_split_time).total_seconds()
-            print(f"  Split Window: {split_duration:.1f}s")
+            print(f"  Split Window: {split_duration:.2f}s")
             splits_per_sec = len(balancer_splits) / split_duration if split_duration > 0 else 0
             print(f"  Split Rate:   {splits_per_sec:.2f} splits/sec")
         
@@ -666,7 +666,7 @@ def analyze_and_report(data: dict):
         ratio = max(active_speeds.values()) / min(active_speeds.values()) if min(active_speeds.values()) > 0 else 0
         if ratio > SPEED_VARIANCE_WARN_RATIO:
             recommendations.append(
-                f"HIGH SPEED VARIANCE ({ratio:.1f}x): Some workers are much slower. "
+                f"HIGH SPEED VARIANCE ({ratio:.2f}x): Some workers are much slower. "
                 f"Check network conditions or implement speed-based work stealing."
             )
     

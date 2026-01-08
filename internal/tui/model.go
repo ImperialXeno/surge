@@ -2,8 +2,10 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,9 +16,10 @@ import (
 type UIState int //Defines UIState as int to be used in rootModel
 
 const (
-	DashboardState UIState = iota //DashboardState is 0 increments after each line
-	InputState                    //InputState is 1
-	DetailState                   //DetailState is 2
+	DashboardState  UIState = iota //DashboardState is 0 increments after each line
+	InputState                     //InputState is 1
+	DetailState                    //DetailState is 2
+	FilePickerState                //FilePickerState is 3
 )
 
 // StartDownloadMsg is sent from the HTTP server to start a new download
@@ -58,6 +61,9 @@ type RootModel struct {
 	inputs         []textinput.Model
 	focusedInput   int
 	progressChan   chan tea.Msg // Channel for events only (start/complete/error)
+
+	// File picker for directory selection
+	filepicker filepicker.Model
 
 	// Navigation
 	cursor       int
@@ -106,6 +112,18 @@ func InitialRootModel() RootModel {
 
 	pwd, _ := os.Getwd()
 
+	// Initialize file picker for directory selection - default to Downloads folder
+	homeDir, _ := os.UserHomeDir()
+	downloadsDir := filepath.Join(homeDir, "Downloads")
+	fp := filepicker.New()
+	fp.CurrentDirectory = downloadsDir
+	fp.DirAllowed = true
+	fp.FileAllowed = false
+	fp.ShowHidden = false
+	fp.ShowSize = true
+	fp.ShowPermissions = true
+	fp.SetHeight(FilePickerHeight)
+
 	// Load paused downloads from master list (now uses global config directory)
 	var downloads []*DownloadModel
 	if pausedEntries, err := downloader.LoadPausedDownloads(); err == nil {
@@ -119,6 +137,10 @@ func InitialRootModel() RootModel {
 				dm.Total = state.TotalSize
 				dm.state.Downloaded.Store(state.Downloaded)
 				dm.state.SetTotalSize(state.TotalSize)
+				// Set progress bar to correct position
+				if state.TotalSize > 0 {
+					dm.progress.SetPercent(float64(state.Downloaded) / float64(state.TotalSize))
+				}
 			}
 			downloads = append(downloads, dm)
 		}
@@ -130,6 +152,7 @@ func InitialRootModel() RootModel {
 		inputs:         []textinput.Model{urlInput, pathInput, filenameInput},
 		state:          DashboardState,
 		progressChan:   progressChan,
+		filepicker:     fp,
 		Pool:           downloader.NewWorkerPool(progressChan),
 		PWD:            pwd,
 	}
