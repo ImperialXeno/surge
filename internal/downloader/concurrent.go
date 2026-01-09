@@ -583,6 +583,8 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string
 				d.activeMu.Lock()
 				delete(d.activeTasks, id)
 				d.activeMu.Unlock()
+				// Clear lastErr so the fallthrough logic doesn't re-queue the original task
+				lastErr = nil
 				break // Exit retry loop, get next task
 			}
 
@@ -600,6 +602,13 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string
 					// The stolen part is already in the queue
 				}
 				break
+			}
+
+			// Resume-on-retry: update task to reflect remaining work
+			// This prevents double-counting bytes on retry
+			current := atomic.LoadInt64(&activeTask.CurrentOffset)
+			if current > task.Offset {
+				task = Task{Offset: current, Length: task.Offset + task.Length - current}
 			}
 		}
 
