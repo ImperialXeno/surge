@@ -168,13 +168,11 @@ func (m RootModel) View() string {
 		listContent = m.list.View()
 	}
 
-	listBox := ListStyle.
-		Width(leftWidth).
-		Height(bottomHeight).
-		Render(lipgloss.JoinVertical(lipgloss.Left,
-			tabBar,
-			listContent,
-		))
+	listInner := lipgloss.JoinVertical(lipgloss.Left,
+		tabBar,
+		listContent,
+	)
+	listBox := renderBtopBox("downloads", listInner, leftWidth, bottomHeight, ColorNeonPink)
 
 	// --- SECTION 4: DETAILS PANE (Bottom Right) ---
 	var detailContent string
@@ -185,10 +183,7 @@ func (m RootModel) View() string {
 			lipgloss.NewStyle().Foreground(ColorNeonCyan).Render("No Download Selected"))
 	}
 
-	detailBox := DetailStyle.
-		Width(rightWidth).
-		Height(bottomHeight).
-		Render(detailContent)
+	detailBox := renderBtopBox("file details", detailContent, rightWidth, bottomHeight, ColorGray)
 
 	// --- ASSEMBLY ---
 
@@ -238,15 +233,6 @@ func renderFocusedDetails(d *DownloadModel, w int) string {
 		Foreground(ColorGray).
 		Render(strings.Repeat("─", contentWidth))
 
-	// Title - centered with margin
-	title := lipgloss.NewStyle().
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Foreground(ColorNeonCyan).
-		Bold(true).
-		MarginBottom(1).
-		Render("FILE DETAILS")
-
 	// File info section
 	fileInfo := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Left, StatsLabelStyle.Render("Filename:"), StatsValueStyle.Render(truncateString(d.Filename, contentWidth-14))),
@@ -289,8 +275,6 @@ func renderFocusedDetails(d *DownloadModel, w int) string {
 
 	// Combine all sections with dividers and spacing
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		title,
-		"",
 		fileInfo,
 		"",
 		divider,
@@ -424,4 +408,77 @@ func renderTabs(active int) string {
 		rendered = append(rendered, style.Render(t))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
+}
+
+// renderBtopBox creates a btop-style box with title embedded in the top border
+// Example: ╭─ title ─────────────────────────────────╮
+func renderBtopBox(title string, content string, width, height int, borderColor lipgloss.Color) string {
+	// Border characters
+	const (
+		topLeft     = "╭"
+		topRight    = "╮"
+		bottomLeft  = "╰"
+		bottomRight = "╯"
+		horizontal  = "─"
+		vertical    = "│"
+	)
+
+	innerWidth := width - 2 // Account for left and right borders
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+
+	// Build top border with embedded title: ╭─ title ──────────╮
+	titleText := fmt.Sprintf(" %s ", title)
+	titleLen := len(titleText)
+	remainingWidth := innerWidth - titleLen - 1 // -1 for the dash after topLeft
+	if remainingWidth < 0 {
+		remainingWidth = 0
+	}
+
+	topBorder := topLeft + horizontal +
+		lipgloss.NewStyle().Foreground(ColorNeonCyan).Bold(true).Render(titleText) +
+		lipgloss.NewStyle().Foreground(borderColor).Render(strings.Repeat(horizontal, remainingWidth)) +
+		lipgloss.NewStyle().Foreground(borderColor).Render(topRight)
+
+	// Build bottom border: ╰───────────────────╯
+	bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render(
+		bottomLeft + strings.Repeat(horizontal, innerWidth) + bottomRight,
+	)
+
+	// Style for vertical borders
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+
+	// Wrap content lines with vertical borders
+	contentLines := strings.Split(content, "\n")
+	innerHeight := height - 2 // Account for top and bottom borders
+
+	var wrappedLines []string
+	for i := 0; i < innerHeight; i++ {
+		var line string
+		if i < len(contentLines) {
+			line = contentLines[i]
+		} else {
+			line = ""
+		}
+		// Pad or truncate line to fit innerWidth
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < innerWidth {
+			line = line + strings.Repeat(" ", innerWidth-lineWidth)
+		} else if lineWidth > innerWidth {
+			// Truncate (simplified - just take first innerWidth chars)
+			runes := []rune(line)
+			if len(runes) > innerWidth {
+				line = string(runes[:innerWidth])
+			}
+		}
+		wrappedLines = append(wrappedLines, borderStyle.Render(vertical)+line+borderStyle.Render(vertical))
+	}
+
+	// Combine all parts
+	return lipgloss.JoinVertical(lipgloss.Left,
+		topBorder,
+		strings.Join(wrappedLines, "\n"),
+		bottomBorder,
+	)
 }
