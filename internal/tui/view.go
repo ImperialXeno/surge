@@ -98,18 +98,26 @@ func (m RootModel) View() string {
 	availableHeight := m.height - 2 // Margin
 	availableWidth := m.width - 4   // Margin
 
-	// Top Row Height (Logo + Graph)
-	topHeight := 9
-
-	// Bottom Row Height (List + Details)
-	bottomHeight := availableHeight - topHeight - 1
-	if bottomHeight < 10 {
-		bottomHeight = 10
-	} // Min height
-
 	// Column Widths
 	leftWidth := int(float64(availableWidth) * ListWidthRatio)
 	rightWidth := availableWidth - leftWidth - 2 // -2 for spacing
+
+	// --- LEFT COLUMN HEIGHTS ---
+	headerHeight := 9
+	listHeight := availableHeight - headerHeight
+	if listHeight < 10 {
+		listHeight = 10
+	}
+
+	// --- RIGHT COLUMN HEIGHTS ---
+	graphHeight := availableHeight / 3
+	if graphHeight < 9 {
+		graphHeight = 9
+	}
+	detailHeight := availableHeight - graphHeight
+	if detailHeight < 10 {
+		detailHeight = 10
+	}
 
 	// --- SECTION 1: HEADER & LOGO (Top Left) ---
 	logoText := `
@@ -125,7 +133,7 @@ func (m RootModel) View() string {
 	// Render logo without borders - clean look
 	headerBox := lipgloss.NewStyle().
 		Width(leftWidth).
-		Height(topHeight).
+		Height(headerHeight).
 		Padding(1, 2).
 		Render(LogoStyle.Render(logoText))
 
@@ -149,15 +157,15 @@ func (m RootModel) View() string {
 	maxSpeed = maxSpeed * 1.1
 
 	// Calculate Available Height for the Graph
-	// topHeight (9) - Borders (2) - Title/Spacer lines (2)
+	// graphHeight - Borders (2) - Title/Spacer lines (2)
 	// Title/Speed takes 1 line, Spacer takes 1 line.
-	graphHeight := topHeight - 4
-	if graphHeight < 1 {
-		graphHeight = 1
+	graphContentHeight := graphHeight - 4
+	if graphContentHeight < 1 {
+		graphContentHeight = 1
 	}
 
 	// Render the Graph (Multi-line)
-	graphVisual := renderMultiLineGraph(m.SpeedHistory, graphContentWidth, graphHeight, maxSpeed, ColorNeonPink)
+	graphVisual := renderMultiLineGraph(m.SpeedHistory, graphContentWidth, graphContentHeight, maxSpeed, ColorNeonPink)
 
 	// Create the Axis (Left side) - compact labels
 	axisStyle := lipgloss.NewStyle().Width(axisWidth).Foreground(ColorGray).Align(lipgloss.Right)
@@ -167,13 +175,13 @@ func (m RootModel) View() string {
 	labelMid := axisStyle.Render(fmt.Sprintf("%.1f", maxSpeed/2))
 	labelBot := axisStyle.Render("0")
 
-	// Build the axis column to match graphHeight exactly
+	// Build the axis column to match graphContentHeight exactly
 	var axisColumn string
 
-	if graphHeight >= 5 {
+	if graphContentHeight >= 5 {
 		// If we have enough space, show Top, Middle, Bottom
 		// Distribute spaces evenly
-		spacesTotal := graphHeight - 3 // 3 labels
+		spacesTotal := graphContentHeight - 3 // 3 labels
 		spaceTop := spacesTotal / 2
 		spaceBot := spacesTotal - spaceTop
 
@@ -186,7 +194,7 @@ func (m RootModel) View() string {
 		)
 	} else {
 		// Compact mode: just Top and Bottom
-		spaces := graphHeight - 2
+		spaces := graphContentHeight - 2
 		if spaces < 0 {
 			spaces = 0
 		}
@@ -217,7 +225,7 @@ func (m RootModel) View() string {
 		fullGraphRow,
 	)
 
-	graphBox := renderBtopBox("Network Activity", speedContent, rightWidth, topHeight, ColorNeonCyan, false)
+	graphBox := renderBtopBox("Network Activity", speedContent, rightWidth, graphHeight, ColorNeonCyan, false)
 
 	// --- SECTION 3: DOWNLOAD LIST (Bottom Left) ---
 	// Tab Bar
@@ -228,10 +236,12 @@ func (m RootModel) View() string {
 	if len(m.list.Items()) == 0 {
 		// FIX: Reduced width (leftWidth-8) to account for padding (4) and borders (2) + safety
 		// preventing the "floating bits" wrap-around artifact.
-		listContentHeight := bottomHeight - 6
+		listContentHeight := listHeight - 6
 		listContent = lipgloss.Place(leftWidth-8, listContentHeight, lipgloss.Center, lipgloss.Center,
 			lipgloss.NewStyle().Foreground(ColorNeonCyan).Render("No downloads"))
 	} else {
+		// ensure list fills the height
+		m.list.SetHeight(listHeight - 4) // adjust for padding/tabs
 		listContent = m.list.View()
 	}
 
@@ -239,26 +249,29 @@ func (m RootModel) View() string {
 		tabBar,
 		listContent,
 	))
-	listBox := renderBtopBox("Downloads", listInner, leftWidth, bottomHeight, ColorNeonPink, true)
+	listBox := renderBtopBox("Downloads", listInner, leftWidth, listHeight, ColorNeonPink, true)
 
 	// --- SECTION 4: DETAILS PANE (Bottom Right) ---
 	var detailContent string
 	if d := m.GetSelectedDownload(); d != nil {
 		detailContent = renderFocusedDetails(d, rightWidth-4)
 	} else {
-		detailContent = lipgloss.Place(rightWidth-4, bottomHeight-4, lipgloss.Center, lipgloss.Center,
+		detailContent = lipgloss.Place(rightWidth-4, detailHeight-4, lipgloss.Center, lipgloss.Center,
 			lipgloss.NewStyle().Foreground(ColorNeonCyan).Render("No Download Selected"))
 	}
 
-	detailBox := renderBtopBox("File Details", detailContent, rightWidth, bottomHeight, ColorGray, true)
+	detailBox := renderBtopBox("File Details", detailContent, rightWidth, detailHeight, ColorGray, true)
 
 	// --- ASSEMBLY ---
 
-	// Top Row
-	topRow := lipgloss.JoinHorizontal(lipgloss.Top, headerBox, graphBox)
+	// Left Column
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox)
 
-	// Bottom Row
-	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, listBox, detailBox)
+	// Right Column
+	rightColumn := lipgloss.JoinVertical(lipgloss.Left, graphBox, detailBox)
+
+	// Body
+	body := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
 
 	// Footer - show notification if active, otherwise show keybindings
 	var footer string
@@ -270,8 +283,7 @@ func (m RootModel) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		topRow,
-		bottomRow,
+		body,
 		footer,
 	)
 }
@@ -311,9 +323,10 @@ func renderFocusedDetails(d *DownloadModel, w int) string {
 	progressLabel := lipgloss.NewStyle().
 		Foreground(ColorNeonCyan).
 		Bold(true).
-		Render("PROGRESS")
+		Render("Progress")
 	progressSection := lipgloss.JoinVertical(lipgloss.Left,
 		progressLabel,
+		"",
 		lipgloss.NewStyle().MarginLeft(1).Render(progView),
 	)
 
@@ -332,12 +345,16 @@ func renderFocusedDetails(d *DownloadModel, w int) string {
 
 	// Combine all sections - dense layout with dividers
 	content := lipgloss.JoinVertical(lipgloss.Left,
+		"",
 		fileInfo,
 		divider,
+		"",
 		progressSection,
 		divider,
+		"",
 		statsSection,
 		divider,
+		"",
 		urlSection,
 	)
 
