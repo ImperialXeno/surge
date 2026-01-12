@@ -72,7 +72,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle download request from HTTP server
 		path := msg.Path
 		if path == "" {
-			path = "."
+			path = m.Settings.General.DefaultDownloadDir
+			if path == "" {
+				path = "."
+			}
 		}
 
 		// Check if extension prompt is enabled
