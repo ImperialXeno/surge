@@ -616,7 +616,14 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string
 			if taskCtx.Err() != nil && lastErr != nil {
 				// Health monitor cancelled this task - re-queue REMAINING work only
 				current := atomic.LoadInt64(&activeTask.CurrentOffset)
-				stopAt := task.Offset + task.Length
+
+				stopAt := atomic.LoadInt64(&activeTask.StopAt)
+				// dont go past orignal end
+				orignalEnd := task.Offset + task.Length
+				if stopAt > orignalEnd {
+					stopAt = orignalEnd
+				}
+
 				if current < stopAt {
 					remainingTask := Task{Offset: current, Length: stopAt - current}
 					queue.Push(remainingTask)
@@ -729,9 +736,24 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 				readErr = err
 				break
 			}
+			if n == 0 {
+				readErr = io.ErrUnexpectedEOF
+				break
+			}
 		}
 
 		if readSoFar > 0 {
+
+			// check stopAt again before writing
+			// truncate readSoFar
+			currentStopAt := atomic.LoadInt64(&activeTask.StopAt)
+			if offset+int64(readSoFar) > currentStopAt {
+				readSoFar = int(currentStopAt - offset)
+				if readSoFar <= 0 {
+					return nil // stolen completely
+				}
+			}
+
 			_, writeErr := file.WriteAt(buf[:readSoFar], offset)
 			if writeErr != nil {
 				return fmt.Errorf("write error: %w", writeErr)
