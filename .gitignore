@@ -13,3 +13,4 @@ grab_bench*
 # Added by goreleaser init:
 dist/
 build/
+.github_token
