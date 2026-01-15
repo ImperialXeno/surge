@@ -1,6 +1,5 @@
 # Surge
 
-[![Build Status](https://github.com/JunaidIslam2105/surge/actions/workflows/ci.yml/badge.svg)](https://github.com/JunaidIslam2105/surge/actions)
 [![Release](https://img.shields.io/github/v/release/JunaidIslam2105/surge)](https://github.com/JunaidIslam2105/surge/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/JunaidIslam2105/surge)](go.mod)
