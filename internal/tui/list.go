@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/junaid2005p/surge/internal/tui/components"
-	"github.com/junaid2005p/surge/internal/utils"
+	"github.com/surge-downloader/surge/internal/tui/components"
+	"github.com/surge-downloader/surge/internal/utils"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"

@@ -1,8 +1,8 @@
 # Surge
 
-[![Release](https://img.shields.io/github/v/release/junaid2005p/surge)](https://github.com/junaid2005p/surge/releases)
+[![Release](https://img.shields.io/github/v/release/surge-downloader/surge)](https://github.com/surge-downloader/surge/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/junaid2005p/surge)](go.mod)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/surge-downloader/surge)](go.mod)
 
 ## About
 
@@ -14,18 +14,18 @@ Surge is a blazing fast, open-source terminal (TUI) download manager built in Go
 
 ### Prebuilt Binaries
 
-[![Get it on GitHub](https://img.shields.io/badge/Get%20it%20on-GitHub-blue?style=for-the-badge&logo=github)](https://github.com/junaid2005p/surge/releases/latest)
+[![Get it on GitHub](https://img.shields.io/badge/Get%20it%20on-GitHub-blue?style=for-the-badge&logo=github)](https://github.com/surge-downloader/surge/releases/latest)
 
 ### Go Install
 
 ```bash
-go install github.com/junaid2005p/surge@latest
+go install github.com/surge-downloader/surge@latest
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/junaid2005p/surge.git
+git clone https://github.com/surge-downloader/surge.git
 cd surge
 go build -o surge .
 ```

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/junaid2005p/surge/internal/messages"
-	"github.com/junaid2005p/surge/internal/utils"
+	"github.com/surge-downloader/surge/internal/messages"
+	"github.com/surge-downloader/surge/internal/utils"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"

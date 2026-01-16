@@ -2,7 +2,7 @@ package downloader
 
 import (
 	"context"
-	"github.com/junaid2005p/surge/internal/messages"
+	"github.com/surge-downloader/surge/internal/messages"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"

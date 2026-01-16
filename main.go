@@ -1,6 +1,6 @@
 package main
 
-import "github.com/junaid2005p/surge/cmd"
+import "github.com/surge-downloader/surge/cmd"
 
 func main() {
 	cmd.Execute()

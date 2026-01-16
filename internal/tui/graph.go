@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/junaid2005p/surge/internal/utils"
+	"github.com/surge-downloader/surge/internal/utils"
 
 	"github.com/charmbracelet/lipgloss"
 )

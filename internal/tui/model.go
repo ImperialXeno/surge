@@ -15,8 +15,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/junaid2005p/surge/internal/config"
-	"github.com/junaid2005p/surge/internal/downloader"
+	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/downloader"
 )
 
 type UIState int //Defines UIState as int to be used in rootModel

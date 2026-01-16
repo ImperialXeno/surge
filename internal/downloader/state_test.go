@@ -3,7 +3,7 @@ package downloader
 import (
 	"testing"
 
-	"github.com/junaid2005p/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/config"
 )
 
 func TestURLHash(t *testing.T) {

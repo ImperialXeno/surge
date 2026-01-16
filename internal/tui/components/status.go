@@ -1,7 +1,7 @@
 package components
 
 import (
-	"github.com/junaid2005p/surge/internal/tui/colors"
+	"github.com/surge-downloader/surge/internal/tui/colors"
 
 	"github.com/charmbracelet/lipgloss"
 )

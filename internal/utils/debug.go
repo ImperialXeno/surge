@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/junaid2005p/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/config"
 )
 
 var (
