@@ -1,4 +1,4 @@
-package downloader
+package state
 
 import (
 	"crypto/sha256"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/download/types"
 )
 
 // masterListMu protects concurrent access to the master list file
@@ -30,20 +31,6 @@ func StateHash(url string, destPath string) string {
 	return hex.EncodeToString(h[:8]) // 16 chars
 }
 
-// DownloadState represents persisted download state for resume
-type DownloadState struct {
-	ID         string `json:"id"`       // Unique ID of the download
-	URLHash    string `json:"url_hash"` // Hash of URL only (for master list compatibility)
-	URL        string `json:"url"`
-	DestPath   string `json:"dest_path"`
-	TotalSize  int64  `json:"total_size"`
-	Downloaded int64  `json:"downloaded"`
-	Tasks      []Task `json:"tasks"` // Remaining tasks
-	Filename   string `json:"filename"`
-	CreatedAt  int64  `json:"created_at"` // Unix timestamp
-	PausedAt   int64  `json:"paused_at"`  // Unix timestamp
-}
-
 // getStatePath returns the path to the state file using URL+DestPath hash
 // This ensures multiple downloads of the same URL get separate state files
 func getStatePath(url string, destPath string) string {
@@ -57,7 +44,7 @@ func getSurgeDir() string {
 
 // SaveState saves download state to global surge state directory
 // Uses URL+destPath for unique state file naming
-func SaveState(url string, destPath string, state *DownloadState) error {
+func SaveState(url string, destPath string, state *types.DownloadState) error {
 	statePath := getStatePath(url, destPath)
 
 	// Create state directory if it doesn't exist
@@ -82,7 +69,7 @@ func SaveState(url string, destPath string, state *DownloadState) error {
 	}
 
 	// Also update master list (uses StateHash for unique identification)
-	entry := DownloadEntry{
+	entry := types.DownloadEntry{
 		ID:       state.ID,
 		URLHash:  state.URLHash,
 		URL:      state.URL,
@@ -97,7 +84,7 @@ func SaveState(url string, destPath string, state *DownloadState) error {
 
 // LoadState loads download state from global surge state directory
 // Uses URL+destPath for unique state file lookup
-func LoadState(url string, destPath string) (*DownloadState, error) {
+func LoadState(url string, destPath string) (*types.DownloadState, error) {
 	statePath := getStatePath(url, destPath)
 
 	data, err := os.ReadFile(statePath)
@@ -105,7 +92,7 @@ func LoadState(url string, destPath string) (*DownloadState, error) {
 		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
 
-	var state DownloadState
+	var state types.DownloadState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
@@ -136,41 +123,23 @@ func DeleteStateByURL(id string, url string, destPath string) error {
 
 // ================== Master List Functions ==================
 
-// MasterList holds all tracked downloads
-type MasterList struct {
-	Downloads []DownloadEntry `json:"downloads"`
-}
-
-// DownloadEntry represents a download in the master list
-type DownloadEntry struct {
-	ID          string `json:"id"`       // Unique ID of the download
-	URLHash     string `json:"url_hash"` // Hash of URL only (backward compatibility)
-	URL         string `json:"url"`
-	DestPath    string `json:"dest_path"`
-	Filename    string `json:"filename"`
-	Status      string `json:"status"`       // "paused", "completed", "error"
-	TotalSize   int64  `json:"total_size"`   // File size in bytes
-	CompletedAt int64  `json:"completed_at"` // Unix timestamp when completed
-	TimeTaken   int64  `json:"time_taken"`   // Duration in milliseconds (for completed)
-}
-
 func getMasterListPath() string {
 	return filepath.Join(getSurgeDir(), "downloads.json")
 }
 
 // LoadMasterList loads the master downloads list from global state directory
-func LoadMasterList() (*MasterList, error) {
+func LoadMasterList() (*types.MasterList, error) {
 	path := getMasterListPath()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &MasterList{Downloads: []DownloadEntry{}}, nil
+			return &types.MasterList{Downloads: []types.DownloadEntry{}}, nil
 		}
 		return nil, fmt.Errorf("failed to read master list: %w", err)
 	}
 
-	var list MasterList
+	var list types.MasterList
 	if err := json.Unmarshal(data, &list); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal master list: %w", err)
 	}
@@ -179,7 +148,7 @@ func LoadMasterList() (*MasterList, error) {
 }
 
 // SaveMasterList saves the master downloads list to global state directory
-func SaveMasterList(list *MasterList) error {
+func SaveMasterList(list *types.MasterList) error {
 	surgeDir := getSurgeDir()
 	path := getMasterListPath()
 
@@ -200,13 +169,13 @@ func SaveMasterList(list *MasterList) error {
 }
 
 // AddToMasterList adds or updates a download entry in the master list
-func AddToMasterList(entry DownloadEntry) error {
+func AddToMasterList(entry types.DownloadEntry) error {
 	masterListMu.Lock()
 	defer masterListMu.Unlock()
 
 	list, err := LoadMasterList()
 	if err != nil {
-		list = &MasterList{Downloads: []DownloadEntry{}}
+		list = &types.MasterList{Downloads: []types.DownloadEntry{}}
 	}
 
 	// Update existing or append new
@@ -243,7 +212,7 @@ func RemoveFromMasterList(id string) error {
 	}
 
 	// Filter out the entry
-	newDownloads := make([]DownloadEntry, 0, len(list.Downloads))
+	newDownloads := make([]types.DownloadEntry, 0, len(list.Downloads))
 	for _, e := range list.Downloads {
 		if e.ID == id {
 			continue // Skip this entry (remove it)
@@ -256,13 +225,13 @@ func RemoveFromMasterList(id string) error {
 }
 
 // LoadPausedDownloads returns all paused downloads from the master list
-func LoadPausedDownloads() ([]DownloadEntry, error) {
+func LoadPausedDownloads() ([]types.DownloadEntry, error) {
 	list, err := LoadMasterList()
 	if err != nil {
 		return nil, err
 	}
 
-	var paused []DownloadEntry
+	var paused []types.DownloadEntry
 	for _, e := range list.Downloads {
 		if e.Status == "paused" {
 			paused = append(paused, e)
@@ -273,13 +242,13 @@ func LoadPausedDownloads() ([]DownloadEntry, error) {
 }
 
 // LoadCompletedDownloads returns all completed downloads from the master list
-func LoadCompletedDownloads() ([]DownloadEntry, error) {
+func LoadCompletedDownloads() ([]types.DownloadEntry, error) {
 	list, err := LoadMasterList()
 	if err != nil {
 		return nil, err
 	}
 
-	var completed []DownloadEntry
+	var completed []types.DownloadEntry
 	for _, e := range list.Downloads {
 		if e.Status == "completed" {
 			completed = append(completed, e)

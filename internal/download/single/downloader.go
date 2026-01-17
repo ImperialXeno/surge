@@ -1,4 +1,4 @@
-package downloader
+package single
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/surge-downloader/surge/internal/download/types"
 	"github.com/surge-downloader/surge/internal/utils"
 )
 
@@ -18,14 +19,14 @@ import (
 // the server doesn't support Range headers. If interrupted, the download must restart.
 type SingleDownloader struct {
 	Client       *http.Client
-	ProgressChan chan<- tea.Msg // Channel for events (start/complete/error)
-	ID           string         // Download ID
-	State        *ProgressState // Shared state for TUI polling
-	Runtime      *RuntimeConfig
+	ProgressChan chan<- tea.Msg       // Channel for events (start/complete/error)
+	ID           string               // Download ID
+	State        *types.ProgressState // Shared state for TUI polling
+	Runtime      *types.RuntimeConfig
 }
 
 // NewSingleDownloader creates a new single-threaded downloader with all required parameters
-func NewSingleDownloader(id string, progressCh chan<- tea.Msg, state *ProgressState, runtime *RuntimeConfig) *SingleDownloader {
+func NewSingleDownloader(id string, progressCh chan<- tea.Msg, state *types.ProgressState, runtime *types.RuntimeConfig) *SingleDownloader {
 	return &SingleDownloader{
 		Client:       &http.Client{Timeout: 0},
 		ProgressChan: progressCh,
@@ -57,7 +58,7 @@ func (d *SingleDownloader) Download(ctx context.Context, rawurl, destPath string
 	}
 
 	// Use .surge extension for incomplete file
-	workingPath := destPath + IncompleteSuffix
+	workingPath := destPath + types.IncompleteSuffix
 	outFile, err := os.Create(workingPath)
 	if err != nil {
 		return err

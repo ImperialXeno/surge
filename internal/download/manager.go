@@ -1,4 +1,4 @@
-package downloader
+package download
 
 import (
 	"context"
@@ -9,15 +9,18 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/surge-downloader/surge/internal/messages"
-	"github.com/surge-downloader/surge/internal/utils"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/surge-downloader/surge/internal/download/concurrent"
+	"github.com/surge-downloader/surge/internal/download/single"
+	"github.com/surge-downloader/surge/internal/download/state"
+	"github.com/surge-downloader/surge/internal/download/types"
+	"github.com/surge-downloader/surge/internal/messages"
+	"github.com/surge-downloader/surge/internal/utils"
 )
 
-var probeClient = &http.Client{Timeout: ProbeTimeout}
+var probeClient = &http.Client{Timeout: types.ProbeTimeout}
 
 var ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
 	"AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -45,7 +48,7 @@ func probeServer(ctx context.Context, rawurl string, filenameHint string) (*Prob
 			utils.Debug("Retrying probe... attempt %d", i+1)
 		}
 
-		probeCtx, cancel := context.WithTimeout(ctx, ProbeTimeout)
+		probeCtx, cancel := context.WithTimeout(ctx, types.ProbeTimeout)
 		defer cancel()
 
 		req, reqErr := http.NewRequestWithContext(probeCtx, http.MethodGet, rawurl, nil)
@@ -131,7 +134,7 @@ func probeServer(ctx context.Context, rawurl string, filenameHint string) (*Prob
 func uniqueFilePath(path string) string {
 	// Check if file exists (both final and incomplete)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if _, err := os.Stat(path + IncompleteSuffix); os.IsNotExist(err) {
+		if _, err := os.Stat(path + types.IncompleteSuffix); os.IsNotExist(err) {
 			return path // Neither exists, use original
 		}
 	}
@@ -159,7 +162,7 @@ func uniqueFilePath(path string) string {
 	for i := 0; i < 100; i++ { // Try next 100 numbers
 		candidate := filepath.Join(dir, fmt.Sprintf("%s(%d)%s", base, counter+i, ext))
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			if _, err := os.Stat(candidate + IncompleteSuffix); os.IsNotExist(err) {
+			if _, err := os.Stat(candidate + types.IncompleteSuffix); os.IsNotExist(err) {
 				return candidate
 			}
 		}
@@ -171,7 +174,7 @@ func uniqueFilePath(path string) string {
 }
 
 // TUIDownload is the main entry point for TUI downloads
-func TUIDownload(ctx context.Context, cfg DownloadConfig) error {
+func TUIDownload(ctx context.Context, cfg types.DownloadConfig) error {
 
 	// Probe server once to get all metadata
 	probe, err := probeServer(ctx, cfg.URL, cfg.Filename)
@@ -206,10 +209,10 @@ func TUIDownload(ctx context.Context, cfg DownloadConfig) error {
 	}
 
 	// Check if this is a resume (explicitly marked by TUI)
-	var savedState *DownloadState
+	var savedState *types.DownloadState
 	if cfg.IsResume && cfg.DestPath != "" {
 		// Resume: use the provided destination path for state lookup
-		savedState, _ = LoadState(cfg.URL, cfg.DestPath)
+		savedState, _ = state.LoadState(cfg.URL, cfg.DestPath)
 	}
 	isResume := cfg.IsResume && savedState != nil && len(savedState.Tasks) > 0 && savedState.DestPath != ""
 
@@ -243,19 +246,19 @@ func TUIDownload(ctx context.Context, cfg DownloadConfig) error {
 	// Choose downloader based on probe results
 	if probe.SupportsRange && probe.FileSize > 0 {
 		utils.Debug("Using concurrent downloader")
-		d := NewConcurrentDownloader(cfg.ID, cfg.ProgressCh, cfg.State, cfg.Runtime)
+		d := concurrent.NewConcurrentDownloader(cfg.ID, cfg.ProgressCh, cfg.State, cfg.Runtime)
 		return d.Download(ctx, cfg.URL, destPath, probe.FileSize, cfg.Verbose)
 	}
 
 	// Fallback to single-threaded downloader
 	utils.Debug("Using single-threaded downloader")
-	d := NewSingleDownloader(cfg.ID, cfg.ProgressCh, cfg.State, cfg.Runtime)
+	d := single.NewSingleDownloader(cfg.ID, cfg.ProgressCh, cfg.State, cfg.Runtime)
 	return d.Download(ctx, cfg.URL, destPath, probe.FileSize, probe.Filename, cfg.Verbose)
 }
 
 // Download is the CLI entry point (non-TUI) - convenience wrapper
 func Download(ctx context.Context, url, outPath string, verbose bool, progressCh chan<- tea.Msg, id string) error {
-	cfg := DownloadConfig{
+	cfg := types.DownloadConfig{
 		URL:        url,
 		OutputPath: outPath,
 		ID:         id,

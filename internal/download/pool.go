@@ -1,23 +1,24 @@
-package downloader
+package download
 
 import (
 	"context"
-	"github.com/surge-downloader/surge/internal/messages"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/surge-downloader/surge/internal/download/types"
+	"github.com/surge-downloader/surge/internal/messages"
 )
 
 const maxDownloads = 3 //We limit the max no of downloads to 3 at a time(XDM does this)
 
 // activeDownload tracks a download that's currently running
 type activeDownload struct {
-	config DownloadConfig
+	config types.DownloadConfig
 	cancel context.CancelFunc
 }
 
 type WorkerPool struct {
-	taskChan   chan DownloadConfig
+	taskChan   chan types.DownloadConfig
 	progressCh chan<- tea.Msg
 	downloads  map[string]*activeDownload // Track active downloads for pause/resume
 	mu         sync.RWMutex
@@ -26,7 +27,7 @@ type WorkerPool struct {
 
 func NewWorkerPool(progressCh chan<- tea.Msg) *WorkerPool {
 	pool := &WorkerPool{
-		taskChan:   make(chan DownloadConfig, 100), //We make it buffered to avoid blocking add
+		taskChan:   make(chan types.DownloadConfig, 100), //We make it buffered to avoid blocking add
 		progressCh: progressCh,
 		downloads:  make(map[string]*activeDownload),
 	}
@@ -36,7 +37,7 @@ func NewWorkerPool(progressCh chan<- tea.Msg) *WorkerPool {
 	return pool
 }
 
-func (p *WorkerPool) Add(cfg DownloadConfig) {
+func (p *WorkerPool) Add(cfg types.DownloadConfig) {
 	p.taskChan <- cfg
 }
 
