@@ -13,6 +13,7 @@ type KeyMap struct {
 	Settings       SettingsKeyMap
 	SettingsEditor SettingsEditorKeyMap
 	BatchConfirm   BatchConfirmKeyMap
+	Update         UpdateKeyMap
 }
 
 // DashboardKeyMap defines keybindings for the main dashboard
@@ -110,6 +111,13 @@ type SettingsEditorKeyMap struct {
 type BatchConfirmKeyMap struct {
 	Confirm key.Binding
 	Cancel  key.Binding
+}
+
+// UpdateKeyMap defines keybindings for update notification
+type UpdateKeyMap struct {
+	OpenGitHub  key.Binding
+	IgnoreNow   key.Binding
+	NeverRemind key.Binding
 }
 
 // Keys contains all the keybindings for the application
@@ -299,6 +307,22 @@ var Keys = KeyMap{
 		),
 	},
 	Settings: SettingsKeyMap{
+		Tab1: key.NewBinding(
+			key.WithKeys("1"),
+			key.WithHelp("1", "general"),
+		),
+		Tab2: key.NewBinding(
+			key.WithKeys("2"),
+			key.WithHelp("2", "connections"),
+		),
+		Tab3: key.NewBinding(
+			key.WithKeys("3"),
+			key.WithHelp("3", "chunks"),
+		),
+		Tab4: key.NewBinding(
+			key.WithKeys("4"),
+			key.WithHelp("4", "performance"),
+		),
 		NextTab: key.NewBinding(
 			key.WithKeys("right"),
 			key.WithHelp("→", "next tab"),
@@ -350,6 +374,20 @@ var Keys = KeyMap{
 		Cancel: key.NewBinding(
 			key.WithKeys("n", "N", "esc"),
 			key.WithHelp("n", "cancel"),
+		),
+	},
+	Update: UpdateKeyMap{
+		OpenGitHub: key.NewBinding(
+			key.WithKeys("o", "O", "enter"),
+			key.WithHelp("o", "open on github"),
+		),
+		IgnoreNow: key.NewBinding(
+			key.WithKeys("i", "I", "esc"),
+			key.WithHelp("i", "ignore for now"),
+		),
+		NeverRemind: key.NewBinding(
+			key.WithKeys("n", "N"),
+			key.WithHelp("n", "never remind"),
 		),
 	},
 }
@@ -433,4 +471,12 @@ func (k BatchConfirmKeyMap) ShortHelp() []key.Binding {
 
 func (k BatchConfirmKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{k.Confirm, k.Cancel}}
+}
+
+func (k UpdateKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}
+}
+
+func (k UpdateKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}}
 }
