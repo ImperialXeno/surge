@@ -118,12 +118,19 @@ var rootCmd = &cobra.Command{
 
 			StartHeadlessConsumer()
 
+			// Auto resume downloads if enabled
+			resumePausedDownloads()
+
 			// Block until signal
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			<-sigChan
 
 			fmt.Println("\nShutting down...")
+			if GlobalPool != nil {
+				GlobalPool.GracefulShutdown()
+			}
+
 		} else {
 			startTUI(port)
 		}
@@ -363,6 +370,13 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 		return
 	}
 
+	// Load settings once for use throughout the function
+	settings, err := config.LoadSettings()
+	if err != nil {
+		// Fallback to defaults if loading fails (though LoadSettings handles missing file)
+		settings = config.DefaultSettings()
+	}
+
 	var req DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -409,8 +423,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 			outPath = defaultOutputDir
 			_ = os.MkdirAll(outPath, 0755)
 		} else {
-			settings, err := config.LoadSettings()
-			if err == nil && settings.General.DefaultDownloadDir != "" {
+			if settings.General.DefaultDownloadDir != "" {
 				outPath = settings.General.DefaultDownloadDir
 				_ = os.MkdirAll(outPath, 0755)
 			} else {
@@ -419,9 +432,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 		}
 	}
 
+	// Enforce absolute path to ensure resume works even if CWD changes
+	outPath = utils.EnsureAbsPath(outPath)
+
 	// Check settings for extension prompt and duplicates
-	settings, err := config.LoadSettings()
-	if err == nil {
+	// settings already loaded above
+	if true {
 		// Check for duplicates
 		isDuplicate := false
 		if GlobalPool.HasDownload(req.URL) {
@@ -466,7 +482,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 		Verbose:    false,
 		ProgressCh: GlobalProgressCh, // Shared channel (headless consumer or TUI)
 		State:      types.NewProgressState(downloadID, 0),
-		// Runtime config could be loaded from settings
+		// Runtime config loaded from settings
+		Runtime: convertRuntimeConfig(settings.ToRuntimeConfig()),
 	}
 
 	// Add to pool
@@ -517,4 +534,80 @@ func initializeGlobalState() {
 
 	// Config logging
 	utils.ConfigureDebug(logsDir)
+}
+
+// convertRuntimeConfig converts config.RuntimeConfig to types.RuntimeConfig
+func convertRuntimeConfig(rc *config.RuntimeConfig) *types.RuntimeConfig {
+	return &types.RuntimeConfig{
+		MaxConnectionsPerHost: rc.MaxConnectionsPerHost,
+		MaxGlobalConnections:  rc.MaxGlobalConnections,
+		UserAgent:             rc.UserAgent,
+		MinChunkSize:          rc.MinChunkSize,
+		MaxChunkSize:          rc.MaxChunkSize,
+		TargetChunkSize:       rc.TargetChunkSize,
+		WorkerBufferSize:      rc.WorkerBufferSize,
+		MaxTaskRetries:        rc.MaxTaskRetries,
+		SlowWorkerThreshold:   rc.SlowWorkerThreshold,
+		SlowWorkerGracePeriod: rc.SlowWorkerGracePeriod,
+		StallTimeout:          rc.StallTimeout,
+		SpeedEmaAlpha:         rc.SpeedEmaAlpha,
+	}
+}
+
+func resumePausedDownloads() {
+
+	settings, err := config.LoadSettings()
+	if err != nil {
+		return // Can't check preference
+	}
+
+	if !settings.General.AutoResume {
+		return
+	}
+
+	pausedEntries, err := state.LoadPausedDownloads()
+	if err != nil {
+		return
+	}
+
+	for _, entry := range pausedEntries {
+		// Load state to define progress state
+		s, err := state.LoadState(entry.URL, entry.DestPath)
+		if err != nil {
+			continue
+		}
+
+		// Reconstruct config
+		runtimeConfig := convertRuntimeConfig(settings.ToRuntimeConfig())
+		outputPath := filepath.Dir(entry.DestPath)
+		// If outputPath is empty or dot, use default
+		if outputPath == "" || outputPath == "." {
+			outputPath = settings.General.DefaultDownloadDir
+		}
+
+		id := entry.ID
+		if id == "" {
+			id = uuid.New().String()
+		}
+
+		// Create progress state
+		progState := types.NewProgressState(id, s.TotalSize)
+		progState.Downloaded.Store(s.Downloaded)
+
+		cfg := types.DownloadConfig{
+			URL:        entry.URL,
+			OutputPath: outputPath,
+			DestPath:   entry.DestPath,
+			ID:         id,
+			Filename:   entry.Filename,
+			Verbose:    false,
+			IsResume:   true,
+			ProgressCh: GlobalProgressCh,
+			State:      progState,
+			Runtime:    runtimeConfig,
+		}
+
+		fmt.Printf("Auto-resuming download: %s\n", entry.Filename)
+		GlobalPool.Add(cfg)
+	}
 }
